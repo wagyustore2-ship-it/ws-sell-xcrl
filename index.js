@@ -1,6 +1,5 @@
 // ==============================================
-// 🤖 WS SELL XCRL • OWL PROXY VERSION
-// ✅ Sudah terpasang proxy kamu
+// 🤖 WS SELL XCRL
 // ==============================================
 
 const { 
@@ -13,12 +12,12 @@ const express = require('express');
 const fs = require('fs-extra');
 const { ProxyAgent } = require('undici');
 
-// ------------------- KONFIGURASI -------------------
+// ------------------- PENGATURAN -------------------
 const BOT_TOKEN = '8611704774:AAGgwMWUJvimvfej5VCWoRlm87CyJocZbTQ';
 const ADMIN_ID = 8783239765;
 const PORT = process.env.PORT || 8080;
 
-// ✅ PROXY OWL SUDAH DIMASUKKAN
+// Jalur koneksi
 const PROXY_URL = 'http://h71MREtVKe40_custom_zone_US_st_city_sid_12803328_time_5:3680136@change4.owlproxy.com:7778';
 
 let PENGATURAN = {
@@ -32,8 +31,8 @@ fs.ensureDirSync('./wa_virtual');
 fs.ensureDirSync('./data');
 
 const app = express();
-app.get('/', (_, res) => res.send('✅ WS SELL XCRL • OWL PROXY AKTIF'));
-app.listen(PORT, () => console.log('✅ Server Berjalan'));
+app.get('/', (_, res) => res.send('✅ WS SELL XCRL Berjalan'));
+app.listen(PORT, () => console.log('✅ Server Aktif'));
 
 const bot = new Bot(BOT_TOKEN);
 const proses = new Map();
@@ -42,20 +41,20 @@ let data = { saldo: {}, transaksi: [], daftar_akun: [], referal: {}, bonus: {} }
 if (fs.existsSync('./data/data.json')) try { data = fs.readJSONSync('./data/data.json'); } catch {}
 const simpan = () => fs.writeJSONSync('./data/data.json', data, { spaces: 2 });
 
-// ==================== MENU UTAMA ====================
+// ==================== MENU ====================
 async function menuPengguna(ctx) {
   await ctx.answerCallbackQuery().catch(() => {});
   const saldo = data.saldo[ctx.from.id] || 0;
   const teks = `🏪 *WS SELL XCRL*
+
 💰 Harga: Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}
 🎁 Bonus: +${PENGATURAN.BONUS_DAFTAR} daftar | +${PENGATURAN.BONUS_JUAL} jual
 💵 Saldo: Rp${saldo.toLocaleString('id-ID')}
-💳 Min WD: Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}
-🌐 Proxy: ✅ OWL US Aktif`;
+💳 Minimal WD: Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}`;
 
   const kb = new InlineKeyboard()
     .text('📤 JUAL NOMOR', 'jual_nomor').row()
-    .text('🤝 REFERAL', 'referal').row()
+    .text('🤝 AJAK TEMAN', 'referal').row()
     .text('💰 CEK SALDO', 'cek_saldo').row()
     .text('💳 TARIK SALDO', 'tarik_saldo');
 
@@ -66,9 +65,10 @@ async function menuPengguna(ctx) {
 async function menuAdmin(ctx) {
   await ctx.answerCallbackQuery().catch(() => {});
   const total = data.daftar_akun.length;
-  const teks = `⚙️ *PANEL ADMIN • WA VIRTUAL*
-📱 Total Akun Aktif: *${total}*
-🌐 Proxy: ✅ OWL United States`;
+  const teks = `⚙️ *PANEL ADMIN*
+
+📱 Total Akun Tersimpan: *${total}*
+🔑 Kelola semua akun dengan aman`;
 
   const kb = new InlineKeyboard()
     .text('📋 DAFTAR AKUN', 'daftar_akun').row()
@@ -82,7 +82,7 @@ async function menuAdmin(ctx) {
 bot.command('start', async ctx => {
   proses.clear();
   return ctx.from.id === ADMIN_ID 
-    ? ctx.reply(`👋 *Selamat Datang Admin!*`, { reply_markup: new InlineKeyboard().text('⚙️ BUKA PANEL ADMIN', 'panel_admin') }) 
+    ? ctx.reply(`👋 *Selamat Datang!*`, { reply_markup: new InlineKeyboard().text('⚙️ BUKA PANEL ADMIN', 'panel_admin') }) 
     : menuPengguna(ctx);
 });
 
@@ -94,16 +94,16 @@ bot.on('message:text', async ctx => {
   if (/^\+?\d{9,15}$/.test(teks)) {
     const nomorBersih = teks.replace('+', '');
     const nomorTampil = `+${nomorBersih}`;
-    if (proses.has(uid)) return ctx.reply('⏳ Masih memproses nomor sebelumnya, tunggu sebentar...');
+    if (proses.has(uid)) return ctx.reply('⏳ Sedang diproses, harap tunggu sebentar...');
 
-    await ctx.reply(`⏳ *Menghubungkan ke Server WA...* 🇺🇸\nMenggunakan jalur OWL Proxy, mohon tunggu...`);
+    await ctx.reply(`⏳ *Menghubungkan ke server...*\nMohon tunggu sebentar...`);
 
     try {
       const { version } = await fetchLatestBaileysVersion();
       const folder = `./wa_virtual/${nomorBersih}`;
       const { state, saveCreds } = await useMultiFileAuthState(folder);
 
-      const agent = new ProxyAgent(PROXY_URL);
+      const agent = new ProxyAgent(PROXY_URL, { connectTimeout: 30000 });
 
       const sock = makeWASocket({
         auth: state,
@@ -121,30 +121,44 @@ bot.on('message:text', async ctx => {
 
       sock.ev.on('creds.update', saveCreds);
 
-      const timeout = setTimeout(() => {
+      const waktuHabis = setTimeout(() => {
         if (proses.has(uid)) {
           proses.delete(uid);
           sock.end().catch(() => {});
-          ctx.reply(`❌ Gagal terhubung. Coba ulangi lagi.`);
+          ctx.reply(`❌ Gagal terhubung. Silakan ulangi kembali.`);
         }
       }, 35000);
 
       sock.ev.on('connection.update', async ({ connection }) => {
         if (connection === 'open') {
-          clearTimeout(timeout);
+          clearTimeout(waktuHabis);
           try {
             const kode = await sock.requestPairingCode(nomorBersih);
             proses.set(uid, { sock, nomor: nomorBersih });
-            await ctx.reply(`✅ *KODE BERHASIL DIBUAT!* 🎯\n\n📱 Nomor: *${nomorTampil}*\n🔑 Kode Verifikasi:\n\`${kode}\`\n\n📝 Masukkan di WA lalu balas kode ini kembali ke bot!`, { parse_mode: 'Markdown' });
+            await ctx.reply(`✅ *Kode Verifikasi Berhasil Dibuat!* 🎯
+
+📱 Nomor: *${nomorTampil}*
+🔑 Kode: \`${kode}\`
+
+📝 Masukkan ke WhatsApp lalu balas kode ini ke bot untuk menyelesaikan proses.`, { parse_mode: 'Markdown' });
           } catch {
-            clearTimeout(timeout); sock.end().catch(() => {}); proses.delete(uid);
-            ctx.reply(`❌ Tidak dapat kode. Coba nomor lain atau ulangi.`);
+            clearTimeout(waktuHabis);
+            sock.end().catch(() => {});
+            proses.delete(uid);
+            ctx.reply(`❌ Tidak dapat membuat kode. Coba nomor lain atau ulangi.`);
           }
         }
-        if (connection === 'close') { clearTimeout(timeout); sock.end().catch(() => {}); proses.delete(uid); }
+        if (connection === 'close') {
+          clearTimeout(waktuHabis);
+          sock.end().catch(() => {});
+          proses.delete(uid);
+        }
       });
 
-    } catch { proses.delete(uid); return ctx.reply(`❌ Kesalahan koneksi proxy.`); }
+    } catch {
+      proses.delete(uid);
+      return ctx.reply(`❌ Kesalahan sistem. Silakan coba lagi.`);
+    }
     return;
   }
 
@@ -157,11 +171,16 @@ bot.on('message:text', async ctx => {
       if (!sudahAda) data.daftar_akun.push({ nomor, waktu: new Date().toLocaleString('id-ID') });
       data.saldo[uid] = (data.saldo[uid] || 0) + PENGATURAN.REWARD;
       simpan();
-      await ctx.reply(`🎉 *BERHASIL TERDAFTAR!* ✅\n\n📱 Nomor: +${nomor}\n💰 Pendapatan: Rp${PENGATURAN.REWARD.toLocaleString()}\n💵 Saldo: Rp${data.saldo[uid].toLocaleString()}`, { parse_mode: 'Markdown' });
+      await ctx.reply(`🎉 *Proses Berhasil!* ✅
+
+📱 Nomor: +${nomor}
+💰 Pendapatan: Rp${PENGATURAN.REWARD.toLocaleString()}
+💵 Saldo Sekarang: Rp${data.saldo[uid].toLocaleString()}`, { parse_mode: 'Markdown' });
     } catch {
-      await ctx.reply(`❌ Kode salah / kadaluarsa. Ulangi proses.`);
+      await ctx.reply(`❌ Kode salah atau sudah kadaluarsa. Silakan ulangi proses.`);
     }
-    sock.end().catch(() => {}); proses.delete(uid);
+    sock.end().catch(() => {});
+    proses.delete(uid);
     return;
   }
 });
@@ -169,14 +188,15 @@ bot.on('message:text', async ctx => {
 bot.callbackQuery('panel_admin', menuAdmin);
 bot.callbackQuery('menu_utama', menuPengguna);
 bot.callbackQuery('jual_nomor', ctx => ctx.answerCallbackQuery('✅ Siap') && ctx.reply('📱 Kirim nomor lengkap: `+62812xxxxxxx`', { parse_mode: 'Markdown' }));
-bot.callbackQuery('cek_saldo', ctx => ctx.answerCallbackQuery('✅') && ctx.reply(`💵 Saldo: Rp${(data.saldo[ctx.from.id]||0).toLocaleString()}`, { parse_mode: 'Markdown' }));
+bot.callbackQuery('cek_saldo', ctx => ctx.answerCallbackQuery('✅') && ctx.reply(`💵 Saldo kamu: Rp${(data.saldo[ctx.from.id]||0).toLocaleString()}`, { parse_mode: 'Markdown' }));
 bot.callbackQuery('daftar_akun', async ctx => {
   if (ctx.from.id !== ADMIN_ID) return;
-  const daftar = data.daftar_akun.map((a,i) => `${i+1}. +${a.nomor}`).join('\n') || 'Belum ada akun';
-  ctx.reply(`📋 *DAFTAR AKUN*:\n\n${daftar}`, { parse_mode: 'Markdown' });
+  const daftar = data.daftar_akun.map((a,i) => `${i+1}. +${a.nomor}`).join('\n') || 'Belum ada akun tersimpan';
+  ctx.reply(`📋 *DAFTAR AKUN*
+
+${daftar}`, { parse_mode: 'Markdown' });
 });
 
-bot.catch(err => console.error('❌ Error:', err));
+bot.catch(err => console.error('❌ Kesalahan:', err));
 bot.start({ polling: true });
-console.log('🤖 WS SELL XCRL • OWL PROXY RUNNING');
-                              
+console.log('🤖 WS SELL XCRL Berjalan Normal');
