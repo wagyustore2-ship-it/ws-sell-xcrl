@@ -18,9 +18,9 @@ const PORT = process.env.PORT || 8080;
 
 let PENGATURAN = {
   REWARD: 5000,
-  BONUS_DAFTAR: 100,       // Bonus saat teman daftar
-  BONUS_JUAL: 200,         // Bonus saat teman jual nomor
-  MIN_WD: 15000,           // Minimal penarikan
+  BONUS_DAFTAR: 100,
+  BONUS_JUAL: 200,
+  MIN_WD: 15000,
   STATUS_TOKO: "🟢 TOKO SEDANG BUKA",
   INFO_WA: "📞 Bantuan: Hubungi Admin"
 };
@@ -46,8 +46,8 @@ let data = {
   saldo: {},
   transaksi: [],
   daftar_akun_milik: [],
-  referal: {},              // { id_pengundang: [id_teman] }
-  sudah_dapat_bonus: {}    // Cegah bonus ganda
+  referal: {},
+  sudah_dapat_bonus: {}
 };
 
 if (fs.existsSync('./data/data.json')) {
@@ -85,12 +85,11 @@ async function menuAdmin(ctx) {
 📱 Total Akun: *${total}*
 👥 Total Referal: *${totalReferal}*
 💰 Harga Beli: *Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}*
-🎁 Bonus: Daftar Rp${PENGATURAN.BONUS_DAFTAR} | Jual Rp${PENGATURAN.BONUS_JUAL}
 💳 Min WD: Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}
   `;
   const kb = new InlineKeyboard()
     .text('📋 LIHAT SEMUA AKUN', 'lihat_semua_akun').row()
-    .text('💰 UBAH HARGA & BONUS', 'ubah_pengaturan').row()
+    .text('⚙️ UBAH PENGATURAN', 'ubah_pengaturan').row()
     .text('💳 ATUR PENARIKAN', 'atur_wd').row()
     .text('📜 RIWAYAT MASUK', 'riwayat');
   await ctx.reply(teks, { reply_markup: kb, parse_mode: 'Markdown' });
@@ -101,22 +100,20 @@ bot.command('start', async ctx => {
   const uid = ctx.from.id;
   const teks = ctx.message.text;
 
-  // Cek apakah dibawa kode referal
   if (teks.includes('start ') && !data.saldo[uid]) {
     const pengundang = teks.split(' ')[1];
-    if (pengundang && pengundang !== uid.toString() && data.saldo[pengundang] !== undefined) {
+    if (pengundang && pengundang !== uid.toString()) {
       if (!data.referal[pengundang]) data.referal[pengundang] = [];
       if (!data.referal[pengundang].includes(uid)) {
         data.referal[pengundang].push(uid);
         data.saldo[pengundang] = (data.saldo[pengundang] || 0) + PENGATURAN.BONUS_DAFTAR;
-        data.transaksi.push(`[${new Date().toLocaleString('id-ID')}] Referal: +Rp${PENGATURAN.BONUS_DAFTAR} dari daftar`);
+        data.transaksi.push(`[${new Date().toLocaleString('id-ID')}] Referal Daftar: +Rp${PENGATURAN.BONUS_DAFTAR}`);
         data.sudah_dapat_bonus[`${pengundang}_${uid}`] = 'daftar';
         simpanData();
-        bot.api.sendMessage(pengundang, `🎁 *BONUS MASUK!*\nTeman mendaftar lewat link kamu: +Rp${PENGATURAN.BONUS_DAFTAR}`);
+        bot.api.sendMessage(pengundang, `🎁 *BONUS MASUK!*\nTeman daftar: +Rp${PENGATURAN.BONUS_DAFTAR}`, { parse_mode: 'Markdown' });
       }
     }
   }
-
   return uid === ADMIN_ID ? menuAdmin(ctx) : menuPengguna(ctx);
 });
 
@@ -125,38 +122,20 @@ bot.callbackQuery('menu_referal', ctx => {
   const uid = ctx.from.id;
   const linkUndang = `https://t.me/${ctx.me.username}?start=${uid}`;
   const jumlahUndang = data.referal[uid] ? data.referal[uid].length : 0;
-
-  ctx.reply(`🤝 *REFERAL* 🎁
-
-👥 Teman Diundang: *${jumlahUndang} orang*
-💰 Bonus:
-• Daftar: +Rp${PENGATURAN.BONUS_DAFTAR}
-• Jual Nomor: +Rp${PENGATURAN.BONUS_JUAL}
-
-🔗 *Link Undangan:*
-\`${linkUndang}\`
-
-👉 Salin & bagikan ke teman kamu!`, { parse_mode: 'Markdown' });
+  ctx.reply(`🤝 *REFERAL* 🎁\n\n👥 Teman Diundang: *${jumlahUndang} orang*\n💰 Bonus:\n• Daftar: +Rp${PENGATURAN.BONUS_DAFTAR}\n• Jual Nomor: +Rp${PENGATURAN.BONUS_JUAL}\n\n🔗 *Link Undangan:*\n\`${linkUndang}\``, { parse_mode: 'Markdown' });
 });
 
-// ==================== PROSES UTAMA ====================
+// ==================== PROSES UTAMA DIPERBAIKI ====================
 bot.callbackQuery('jual_akun', ctx => {
   ctx.answerCallbackQuery();
-  ctx.reply('📤 *Kirim nomor lengkap dengan kode negara:*\nContoh: `+628123456789` / `+1234567890`', { parse_mode: 'Markdown' });
+  ctx.reply('📤 *Kirim nomor lengkap dengan kode negara:*\nContoh: `+628123456789` / `+258864136742`', { parse_mode: 'Markdown' });
 });
 
 bot.callbackQuery('cara_kerja', ctx => {
   ctx.answerCallbackQuery();
-  ctx.reply(`📖 *ALUR KERJA*
-
-1️⃣ Kirim nomor WA kamu
-2️⃣ Bot kirim *Kode Verifikasi WS*
-3️⃣ Buka WA → Masukkan nomor → Pilih *Verifikasi lewat kode*
-4️⃣ Masukkan kode, lalu **kirim kode itu kembali ke bot**
-5️⃣ ✅ Selesai, saldo masuk`, { parse_mode: 'Markdown' });
+  ctx.reply(`📖 *ALUR KERJA*\n\n1️⃣ Kirim nomor\n2️⃣ Dapat Kode WS\n3️⃣ Buka WA → Verifikasi lewat kode\n4️⃣ Masukkan kode lalu kirim ke bot\n5️⃣ ✅ Selesai, saldo masuk`, { parse_mode: 'Markdown' });
 });
 
-// Terima nomor penjual
 bot.on('message:text', async ctx => {
   const uid = ctx.from.id;
   const teks = ctx.message.text.trim();
@@ -184,7 +163,8 @@ bot.on('message:text', async ctx => {
     const nomorBersih = teks.replace('+', '');
     const nomorTampil = `+${nomorBersih}`;
 
-    await ctx.reply('⏳ Memproses, mohon tunggu...');
+    // ✅ Teks baru lebih keren
+    await ctx.reply('⏳ *Wait for OTP...* ⚡\nSedang menghubungkan ke server resmi WhatsApp...');
 
     try {
       const { version } = await fetchLatestBaileysVersion();
@@ -196,44 +176,57 @@ bot.on('message:text', async ctx => {
         version: version,
         printQRInTerminal: false,
         browser: ['WhatsApp', 'Android', '2.25.4.10'],
-        connectTimeoutMs: 60000
+        connectTimeoutMs: 25000,
+        defaultQueryTimeoutMs: 15000,
+        syncFullHistory: false,
+        markOnlineOnConnect: false,
+        keepAliveIntervalMs: 20000
       });
 
       sock.ev.on('creds.update', saveCreds);
+
+      // ✅ Antistuck: batas waktu 25 detik
+      const prosesTimeout = setTimeout(() => {
+        if (prosesVerifikasi.has(uid)) {
+          prosesVerifikasi.delete(uid);
+          sock.end().catch(() => {});
+          ctx.reply('❌ *Gagal Mendapatkan Kode* ⚠️\nServer tidak merespon, silakan kirim ulang nomor.');
+        }
+      }, 25000);
+
       sock.ev.on('connection.update', async ({ connection }) => {
         if (connection === 'open') {
+          clearTimeout(prosesTimeout);
           try {
             const kodeWS = await sock.requestPairingCode(nomorBersih);
             prosesVerifikasi.set(uid, { sock, nomor: nomorBersih });
 
-            await ctx.reply(`✅ *NOMOR DITERIMA!* 📲
+            await ctx.reply(`✅ *OTP CODE GENERATED!* 🎯\n\n📱 Nomor: *${nomorTampil}*\n🔑 *KODE VERIFIKASI WS:*\n\`${kodeWS}\`\n\n📝 *Cara pakai:*\n1. Buka WhatsApp\n2. Masukkan nomor di atas\n3. Pilih *Verifikasi lewat kode*\n4. Masukkan kode ini\n5. **Balas kode kembali ke bot**`, { parse_mode: 'Markdown' });
 
-🔑 *KODE VERIFIKASI WS:*
-\`${kodeWS}\`
+          } catch (err) {
+            clearTimeout(prosesTimeout);
+            sock.end().catch(() => {});
+            await ctx.reply('❌ *Gagal Buat Kode* ⚠️\nNomor tidak valid atau tidak didukung.');
+          }
+        }
 
-📝 *Caranya:*
-1. Buka WhatsApp
-2. Masukkan nomor: *${nomorTampil}*
-3. Pilih: *Verifikasi lewat nomor telepon*
-4. Pilih: *Gunakan kode verifikasi*
-5. Masukkan kode di atas
-6. **Kirim kode ini kembali ke bot**
-`, { parse_mode: 'Markdown' });
-
-          } catch {
-            await ctx.reply('❌ Gagal buat kode, coba kirim ulang.');
-            sock.end();
+        if (connection === 'close') {
+          clearTimeout(prosesTimeout);
+          if (prosesVerifikasi.has(uid)) {
+            prosesVerifikasi.delete(uid);
+            sock.end().catch(() => {});
           }
         }
       });
 
-    } catch {
-      return ctx.reply('❌ Nomor tidak valid.');
+    } catch (err) {
+      console.error('Error:', err);
+      return ctx.reply('❌ *Error Sistem* ⚠️\nSilakan coba lagi sebentar.');
     }
     return;
   }
 
-  // Verifikasi otomatis & berikan bonus jual ke pengundang
+  // Proses verifikasi setelah dapat kode
   if (prosesVerifikasi.has(uid)) {
     const { sock, nomor } = prosesVerifikasi.get(uid);
     const kodeDikirim = teks.replace(/[\s-]/g, '').toUpperCase();
@@ -243,26 +236,21 @@ bot.on('message:text', async ctx => {
 
       const sudahAda = data.daftar_akun_milik.find(a => a.nomor === nomor);
       if (!sudahAda) {
-        data.daftar_akun_milik.push({
-          nomor: nomor,
-          nomor_tampil: `+${nomor}`,
-          waktu_diterima: new Date().toLocaleString('id-ID')
-        });
+        data.daftar_akun_milik.push({ nomor: nomor, nomor_tampil: `+${nomor}`, waktu_diterima: new Date().toLocaleString('id-ID') });
       }
 
-      // Beri saldo ke penjual
       data.saldo[uid] = (data.saldo[uid] || 0) + PENGATURAN.REWARD;
       data.transaksi.push(`[${new Date().toLocaleString('id-ID')}] +${nomor} | Rp${PENGATURAN.REWARD}`);
 
-      // 🎁 Beri bonus jual ke pengundang jika ada
+      // Bonus referral
       for (const [pengundang, daftarTeman] of Object.entries(data.referal)) {
         if (daftarTeman.includes(uid)) {
           const kunci = `${pengundang}_${uid}_jual`;
           if (!data.sudah_dapat_bonus[kunci]) {
             data.saldo[pengundang] = (data.saldo[pengundang] || 0) + PENGATURAN.BONUS_JUAL;
-            data.transaksi.push(`[${new Date().toLocaleString('id-ID')}] Referal Jual: +Rp${PENGATURAN.BONUS_JUAL}`);
+            data.transaksi.push(`[${new Date().toLocaleString('id-ID')}] Bonus Jual: +Rp${PENGATURAN.BONUS_JUAL}`);
             data.sudah_dapat_bonus[kunci] = true;
-            bot.api.sendMessage(pengundang, `🎁 *BONUS JUAL MASUK!*\nTeman berhasil jual nomor: +Rp${PENGATURAN.BONUS_JUAL}`);
+            bot.api.sendMessage(pengundang, `🎁 *BONUS MASUK!*\nTeman berhasil jual nomor: +Rp${PENGATURAN.BONUS_JUAL}`, { parse_mode: 'Markdown' });
           }
           break;
         }
@@ -270,19 +258,13 @@ bot.on('message:text', async ctx => {
 
       simpanData();
 
-      await ctx.reply(`🎉 *BERHASIL TERJUAL!* ✅
+      await ctx.reply(`🎉 *SUCCESSFULLY SOLD!* ✅\n\n📞 Nomor: *+${nomor}*\n💰 Pendapatan: *Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}*\n💵 Saldo Sekarang: *Rp${data.saldo[uid].toLocaleString('id-ID')}*`, { parse_mode: 'Markdown' });
 
-📞 Nomor: +${nomor}
-💰 Pendapatan: *Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}*
-💵 Saldo Sekarang: *Rp${data.saldo[uid].toLocaleString('id-ID')}*`, { parse_mode: 'Markdown' });
+      bot.api.sendMessage(ADMIN_ID, `📥 *AKUN BARU MASUK!* ✅\n📱 Nomor: *+${nomor}*\n⏰ Waktu: ${new Date().toLocaleString('id-ID')}`, { parse_mode: 'Markdown' });
 
-      bot.api.sendMessage(ADMIN_ID, `📥 *AKUN BARU MASUK!* ✅
-📱 Nomor: *+${nomor}*
-⏰ Waktu: ${new Date().toLocaleString('id-ID')}`, { parse_mode: 'Markdown' });
-
-    } catch {
-      await ctx.reply('❌ Kode salah/kadaluarsa, ulangi lagi.');
-      sock.end();
+    } catch (err) {
+      await ctx.reply('❌ *Kode Salah / Kadaluarsa* ⚠️\nSilakan ulangi proses jual akun.');
+      sock.end().catch(() => {});
     }
     prosesVerifikasi.delete(uid);
     return;
@@ -292,27 +274,22 @@ bot.on('message:text', async ctx => {
   if (uid === ADMIN_ID && /^\+?\d{9,15}$/.test(teks)) {
     const nomorBersih = teks.replace('+', '');
     const akunTersimpan = data.daftar_akun_milik.find(a => a.nomor === nomorBersih);
-
     if (!akunTersimpan) return ctx.reply('❌ Nomor tidak ada di daftar.');
 
-    await ctx.reply('🔄 Membuat kode baru...');
+    await ctx.reply('🔄 *Generating new code...* ⚡');
     try {
       const { version } = await fetchLatestBaileysVersion();
       const { state } = await useMultiFileAuthState(`./sesi_akun/${nomorBersih}`);
-      const sock = makeWASocket({ auth: state, version });
+      const sock = makeWASocket({ auth: state, version, browser: ['WhatsApp', 'Android', '2.25.4.10'] });
 
       sock.ev.on('connection.update', async ({ connection }) => {
         if (connection === 'open') {
           const kodeBaru = await sock.requestPairingCode(nomorBersih);
-          await ctx.reply(`✅ *KODE WS BARU* 🔑
-
-📞 Nomor: *+${nomorBersih}*
-🔑 Kode: \`${kodeBaru}\``, { parse_mode: 'Markdown' });
+          await ctx.reply(`✅ *NEW WS CODE* 🔑\n\n📞 Nomor: *+${nomorBersih}*\n🔑 Kode: \`${kodeBaru}\``, { parse_mode: 'Markdown' });
         }
       });
-
     } catch {
-      ctx.reply('❌ Gagal membuat kode.');
+      ctx.reply('❌ Gagal membuat kode baru.');
     }
     return;
   }
@@ -322,37 +299,35 @@ bot.on('message:text', async ctx => {
 bot.callbackQuery('lihat_semua_akun', ctx => {
   if (ctx.from.id !== ADMIN_ID) return ctx.answerCallbackQuery('❌ Bukan admin');
   ctx.answerCallbackQuery();
-
   if (data.daftar_akun_milik.length === 0) return ctx.reply('📋 Belum ada akun tersimpan.');
-
   const daftar = data.daftar_akun_milik.map((a, i) => `${i+1}. ${a.nomor_tampil}`).join('\n');
-  ctx.reply(`📋 *DAFTAR AKUN* 📱\n\n${daftar}`, { parse_mode: 'Markdown' });
+  ctx.reply(`📋 *DAFTAR AKUN TERSIMPAN* 📱\n\n${daftar}`, { parse_mode: 'Markdown' });
 });
 
 bot.callbackQuery('ubah_pengaturan', ctx => {
   if (ctx.from.id !== ADMIN_ID) return;
   ctx.answerCallbackQuery();
-  ctx.reply(`⚙️ *UBAH PENGATURAN*\n\nContoh perintah:\n• \`harga 5000\`\n• \`bonusdaftar 100\`\n• \`bonusjual 200\`\n• \`minwd 15000\``, { parse_mode: 'Markdown' });
+  ctx.reply(`⚙️ *UBAH PENGATURAN*\nContoh:\n• \`harga 5000\`\n• \`bonusdaftar 100\`\n• \`bonusjual 200\`\n• \`minwd 15000\``, { parse_mode: 'Markdown' });
 });
 
 bot.callbackQuery('cek_saldo', ctx => { ctx.answerCallbackQuery(); const s = data.saldo[ctx.from.id]||0; ctx.reply(`💵 Saldo: Rp${s.toLocaleString('id-ID')}`); });
 bot.callbackQuery('menu_wd', ctx => { ctx.answerCallbackQuery(); const s = data.saldo[ctx.from.id]||0; if (s < PENGATURAN.MIN_WD) return ctx.reply(`❌ Minimal WD: Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}`); ctx.reply(`💳 Format: /wd dana 25000`); });
-bot.callbackQuery('atur_wd', ctx => { ctx.answerCallbackQuery(); ctx.reply('✏️ Contoh: wd dana 08xxxx a.n Nama'); });
-bot.callbackQuery('riwayat', ctx => { ctx.answerCallbackQuery(); const log = data.transaksi.slice(-15).join('\n')||'Kosong'; ctx.reply(`📜 Riwayat:\n${log}`); });
+bot.callbackQuery('atur_wd', ctx => { ctx.answerCallbackQuery(); ctx.reply('✏️ Atur metode WD di file pengaturan.'); });
+bot.callbackQuery('riwayat', ctx => { ctx.answerCallbackQuery(); const log = data.transaksi.slice(-15).join('\n')||'Kosong'; ctx.reply(`📜 Riwayat Transaksi:\n${log}`, { parse_mode: 'Markdown' }); });
 
 bot.command('wd', async ctx => {
   const uid = ctx.from.id;
   const args = ctx.message.text.trim().split(' ');
   const metode = args[1]?.toLowerCase();
   const jumlah = parseInt(args[2]);
-  if (!metode || !jumlah || jumlah < PENGATURAN.MIN_WD || !WD_METHODS[metode] || (data.saldo[uid]||0) < jumlah)
-    return ctx.reply('❌ Format salah / saldo kurang / metode tidak ada');
+  if (!metode || !jumlah || jumlah < PENGATURAN.MIN_WD || (data.saldo[uid]||0) < jumlah)
+    return ctx.reply('❌ Format salah / saldo kurang / tidak memenuhi minimal penarikan');
   data.saldo[uid] -= jumlah; simpanData();
-  ctx.reply(`✅ WD diterima: Rp${jumlah.toLocaleString('id-ID')} ke ${metode.toUpperCase()}`);
-  bot.api.sendMessage(ADMIN_ID, `📤 WD: ${uid} | Rp${jumlah.toLocaleString('id-ID')}`);
+  ctx.reply(`✅ *Permintaan WD Berhasil!* ✅\nJumlah: *Rp${jumlah.toLocaleString('id-ID')}*\nTujuan: *${metode.toUpperCase()}*`);
+  bot.api.sendMessage(ADMIN_ID, `📤 *PERMINTAAN WD* 📥\nUser: ${uid}\nJumlah: Rp${jumlah.toLocaleString('id-ID')}\nMetode: ${metode.toUpperCase()}`);
 });
 
 bot.catch(err => console.error('❌ Error:', err));
 bot.start({ polling: true });
 console.log('🤖 WS SELL XCRL • MADE IN WAGYU');
-                  
+        
