@@ -1,11 +1,12 @@
 // ==============================================
-// 🤖 WS SELL XCRL • LOGIN VIA WS CODE
+// 🤖 WS SELL XCRL • MADE IN WAGYU
 // ==============================================
 
-const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const { Bot, InlineKeyboard } = require('grammy');
+const { Boom } = require('@hapi/boom');
 const express = require('express');
-const fs = require('fs');
+const fs = require('fs-extra');
 const path = require('path');
 
 // ------------------- KONFIGURASI -------------------
@@ -29,59 +30,61 @@ let WD_METHODS = {
 };
 // ---------------------------------------------------
 
-// Buat folder penyimpanan sesi jika belum ada
-if (!fs.existsSync('./auth')) fs.mkdirSync('./auth', { recursive: true });
+// Buat folder jika belum ada
+fs.ensureDirSync('./auth');
 
-// Penjaga agar bot tetap hidup 24 jam
+// Penjaga nyala 24 jam
 const app = express();
-app.get('/', (_, res) => res.send('✅ WS SELL XCRL Aktif 24 Jam | WA Tetap Bisa Diakses'));
-app.listen(PORT, () => console.log('🌐 Penjaga nyala berjalan di port', PORT));
+app.get('/', (req, res) => res.send('✅ WS SELL XCRL Aktif 24 Jam'));
+app.listen(PORT, () => console.log(`🌐 Penjaga nyala berjalan di port ${PORT}`));
 
 const bot = new Bot(BOT_TOKEN);
-const prosesPengguna = new Map(); // Menyimpan proses verifikasi per user
+const proses = new Map();
 let data = { saldo: {}, transaksi: [], wd: {} };
 
-// Muat dan simpan data otomatis
+// Muat & Simpan Data
 if (fs.existsSync('./data.json')) {
   try {
-    const muat = JSON.parse(fs.readFileSync('./data.json'));
+    const muat = fs.readJSONSync('./data.json');
     data = muat.data || data;
     PENGATURAN = muat.pengaturan || PENGATURAN;
     WD_METHODS = muat.wd || WD_METHODS;
-  } catch (e) {}
+  } catch (e) {
+    console.log('Data baru dibuat');
+  }
 }
 function simpanSemua() {
-  fs.writeFileSync('./data.json', JSON.stringify({ data, pengaturan: PENGATURAN, wd: WD_METHODS }, null, 2));
+  fs.writeJSONSync('./data.json', { data, pengaturan: PENGATURAN, wd: WD_METHODS }, { spaces: 2 });
 }
 
-// ==================== MENU UTAMA ====================
+// ==================== MENU ====================
 async function menuPengguna(ctx) {
   const saldo = data.saldo[ctx.from.id] || 0;
   const teks = `
 🏪 *${PENGATURAN.STATUS_TOKO}*
 💰 Harga per nomor: *Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}*
 💵 Saldo kamu: *Rp${saldo.toLocaleString('id-ID')}*
-💳 Minimal penarikan: *Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}*
+💳 Minimal WD: *Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}*
 
 ${PENGATURAN.INFO_WA}
   `;
-  const tombol = new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text('📤 JUAL NOMOR', 'jual_nomor').row()
     .text('💰 CEK SALDO', 'cek_saldo').row()
     .text('💳 TARIK SALDO', 'menu_wd').row()
     .text('📖 CARA PAKAI', 'cara_pakai');
-  await ctx.reply(`👋 *WS SELL XCRL* 🚀\n${teks}`, { reply_markup: tombol, parse_mode: 'Markdown' });
+  await ctx.reply(`👋 *WS SELL XCRL* 🚀\n${teks}`, { reply_markup: kb, parse_mode: 'Markdown' });
 }
 
 async function menuAdmin(ctx) {
-  const tombol = new InlineKeyboard()
+  const kb = new InlineKeyboard()
     .text('💰 UBAH RATE', 'ubah_rate').row()
-    .text('🏪 ATUR STATUS TOKO', 'atur_status').row()
+    .text('🏪 ATUR TOKO', 'atur_status').row()
     .text('📞 UBAH INFO', 'ubah_info').row()
-    .text('💳 ATUR METODE WD', 'atur_wd').row()
-    .text('👤 DAFTAR PENGGUNA', 'lihat_user').row()
-    .text('📋 RIWAYAT TRANSAKSI', 'riwayat');
-  await ctx.reply(`⚙️ *PANEL ADMIN*\n💰 Rate: Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}\n🏪 Status: ${PENGATURAN.STATUS_TOKO}`, { reply_markup: tombol, parse_mode: 'Markdown' });
+    .text('💳 ATUR WD', 'atur_wd').row()
+    .text('👤 DAFTAR USER', 'lihat_user').row()
+    .text('📋 RIWAYAT', 'riwayat');
+  await ctx.reply(`⚙️ *PANEL ADMIN*\n💰 Rate: Rp${PENGATURAN.REWARD}\n🏪 Status: ${PENGATURAN.STATUS_TOKO}`, { reply_markup: kb, parse_mode: 'Markdown' });
 }
 
 // ==================== PROSES UTAMA ====================
@@ -89,249 +92,124 @@ bot.on('message:text', async ctx => {
   const uid = ctx.from.id;
   const teks = ctx.message.text.trim();
 
-  // Perintah khusus Admin
+  // Perintah Admin
   if (uid === ADMIN_ID) {
     if (teks.startsWith('rate ')) {
-      const nilai = parseInt(teks.split(' ')[1]);
-      if (nilai > 0) {
-        PENGATURAN.REWARD = nilai;
-        simpanSemua();
-        return ctx.reply(`✅ Rate berhasil diubah menjadi *Rp${nilai.toLocaleString('id-ID')}*`, { parse_mode: 'Markdown' });
-      }
+      const v = parseInt(teks.split(' ')[1]);
+      if (v > 0) { PENGATURAN.REWARD = v; simpanSemua(); return ctx.reply(`✅ Rate diubah: Rp${v.toLocaleString('id-ID')}`); }
     }
-    if (teks.startsWith('info ')) {
-      PENGATURAN.INFO_WA = teks.slice(5).trim();
-      simpanSemua();
-      return ctx.reply(`✅ Info berhasil diperbarui!`);
-    }
+    if (teks.startsWith('info ')) { PENGATURAN.INFO_WA = teks.slice(5); simpanSemua(); return ctx.reply(`✅ Info diperbarui`); }
     if (teks.startsWith('wd ')) {
-      const [_, metode, ...detail] = teks.split(' ');
-      if (metode && detail.length > 0) {
-        WD_METHODS[metode.toLowerCase()] = detail.join(' ');
-        simpanSemua();
-        return ctx.reply(`✅ Metode *${metode.toUpperCase()}* berhasil disimpan!`);
-      }
+      const [_, m, ...d] = teks.split(' ');
+      if (m && d.length) { WD_METHODS[m] = d.join(' '); simpanSemua(); return ctx.reply(`✅ ${m.toUpperCase()} diperbarui`); }
     }
   }
 
-  // Cek jika toko sedang tutup
-  if (PENGATURAN.STATUS_TOKO.includes('🔴 TUTUP') && uid !== ADMIN_ID) {
+  if (PENGATURAN.STATUS_TOKO.includes('🔴') && uid !== ADMIN_ID)
     return ctx.reply(PENGATURAN.PESAN_TUTUP);
-  }
 
-  // 🟡 LANGKAH 1: Pengguna kirim nomor
+  // 🟡 Terima nomor, kirim kode
   if (/^\+?\d{10,15}$/.test(teks)) {
     const nomor = teks.replace('+', '');
-    await ctx.reply('⏳ Sedang memproses, mohon tunggu sebentar...');
+    await ctx.reply('⏳ Memproses nomor, mohon tunggu...');
 
     try {
       const { state, saveCreds } = await useMultiFileAuthState(`./auth/${uid}_${nomor}`);
       const sock = makeWASocket({
         auth: state,
         printQRInTerminal: false,
-        browser: ['WhatsApp', 'Android', '2.24.10.5'],
+        browser: ['Chrome', 'Windows', '10.0'],
         syncFullHistory: false
       });
 
       sock.ev.on('creds.update', saveCreds);
-
       sock.ev.on('connection.update', async ({ connection }) => {
         if (connection === 'open') {
-          // Meminta kode verifikasi lewat nomor
           const kode = await sock.requestPairingCode(nomor);
-          prosesPengguna.set(uid, { sock, nomor });
-
+          proses.set(uid, { sock, nomor });
           await ctx.reply(`✅ *NOMOR DITERIMA!* 📲
 
 📝 CARA VERIFIKASI:
-1. Buka aplikasi WhatsApp di HP kamu
+1. Buka aplikasi WhatsApp
 2. Masukkan nomor: *+${nomor}*
 3. Pilih opsi: *Verifikasi lewat nomor telepon*
 4. Masukkan kode berikut:
 
 🔑 *${kode}*
 
-👉 *Kirim kode ini kembali ke bot* untuk menyelesaikan proses
-✅ *WA kamu tetap bisa dibuka dan dipakai seperti biasa*`, { parse_mode: 'Markdown' });
+👉 *Kirim kode ini kembali ke bot*
+✅ WA kamu tetap bisa dibuka & dipakai normal`, { parse_mode: 'Markdown' });
         }
       });
 
     } catch (err) {
-      prosesPengguna.delete(uid);
-      return ctx.reply('❌ Gagal memproses! Pastikan nomor valid dan coba lagi.');
+      proses.delete(uid);
+      return ctx.reply('❌ Gagal memproses, coba nomor lain.');
     }
     return;
   }
 
-  // 🟢 LANGKAH 2: Pengguna kirim kode WS → Otomatis terhubung
-  if (prosesPengguna.has(uid)) {
-    const { sock, nomor } = prosesPengguna.get(uid);
+  // 🟢 Terima kode, otomatis login & masuk saldo
+  if (proses.has(uid)) {
+    const { sock, nomor } = proses.get(uid);
     const kodeBersih = teks.replace(/\s|-/g, '');
 
     try {
       await sock.login(kodeBersih);
-
-      // Tambah saldo otomatis
       data.saldo[uid] = (data.saldo[uid] || 0) + PENGATURAN.REWARD;
-      const catatan = `[${new Date().toLocaleString('id-ID')}] | +${nomor} | +Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}`;
-      data.transaksi.push(catatan);
+      data.transaksi.push(`[${new Date().toLocaleString('id-ID')}] +${nomor} +Rp${PENGATURAN.REWARD}`);
       simpanSemua();
 
       await ctx.reply(`🎉 *BERHASIL TERHUBUNG!* ✅
-
 📞 Nomor: +${nomor}
-🔐 Status: *Terverifikasi & Aktif*
 💰 Pendapatan: *Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}*
 💵 Saldo Baru: *Rp${data.saldo[uid].toLocaleString('id-ID')}*
 
-✅ *WA kamu tetap aman dan bisa dibuka kapan saja*
-✅ Semua proses selesai otomatis`, { parse_mode: 'Markdown' });
+✅ Proses selesai`, { parse_mode: 'Markdown' });
 
-      // Notifikasi ke Admin
-      await bot.api.sendMessage(ADMIN_ID, `📥 *TRANSAKSI BERHASIL*
-👤 Pengguna ID: ${uid}
+      bot.api.sendMessage(ADMIN_ID, `📥 *TRANSAKSI MASUK*
+👤 User: ${uid}
 📞 Nomor: +${nomor}
-💵 Masuk: Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}`, { parse_mode: 'Markdown' });
+💵 Rp${PENGATURAN.REWARD}`);
 
     } catch (err) {
-      await ctx.reply('❌ Kode salah, kadaluarsa, atau tidak valid!\nSilakan ulangi proses jual nomor lagi.');
+      await ctx.reply('❌ Kode salah/kadaluarsa, ulangi jual nomor.');
     }
-    prosesPengguna.delete(uid);
+    proses.delete(uid);
     return;
   }
 });
 
-// ==================== TOMBOL & PERINTAH ====================
-bot.callbackQuery('jual_nomor', async ctx => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply('📤 Silakan kirim nomor WhatsApp kamu dengan format:\nContoh: *+628123456789*', { parse_mode: 'Markdown' });
-});
+// Tombol & Perintah
+bot.callbackQuery('jual_nomor', ctx => { ctx.answerCallbackQuery(); ctx.reply('📤 Kirim nomor: Contoh *+628123456789*', { parse_mode: 'Markdown' }); });
+bot.callbackQuery('cek_saldo', ctx => { ctx.answerCallbackQuery(); const s = data.saldo[ctx.from.id]||0; ctx.reply(`💵 Saldo: Rp${s.toLocaleString('id-ID')}`); });
+bot.callbackQuery('cara_pakai', ctx => { ctx.answerCallbackQuery(); ctx.reply(`📖 Cara Pakai:\n1. Kirim nomor\n2. Dapat kode\n3. Masukkan di WA\n4. Kirim kode ke bot\n✅ Selesai`); });
+bot.callbackQuery('menu_wd', ctx => { ctx.answerCallbackQuery(); const s = data.saldo[ctx.from.id]||0; if (s < PENGATURAN.MIN_WD) return ctx.reply(`❌ Minimal WD: Rp${PENGATURAN.MIN_WD}`); const daftar = Object.entries(WD_METHODS).map(([m,r])=>`• ${m.toUpperCase()}: ${r}`).join('\n'); ctx.reply(`💳 Format: /wd dana 20000\n\n${daftar}`); });
+bot.callbackQuery('ubah_rate', ctx => { ctx.answerCallbackQuery(); ctx.reply('✏️ Contoh: *rate 7500*'); });
+bot.callbackQuery('atur_status', ctx => { ctx.answerCallbackQuery(); const kb = new InlineKeyboard().text('🟢 BUKA', 'set_buka').text('🔴 TUTUP', 'set_tutup'); ctx.reply('🏪 Pilih status:', { reply_markup: kb }); });
+bot.callbackQuery('set_buka', ctx => { PENGATURAN.STATUS_TOKO = '🟢 TOKO SEDANG BUKA'; simpanSemua(); ctx.answerCallbackQuery(); ctx.reply('✅ Toko dibuka'); });
+bot.callbackQuery('set_tutup', ctx => { PENGATURAN.STATUS_TOKO = '🔴 TOKO SEDANG TUTUP'; simpanSemua(); ctx.answerCallbackQuery(); ctx.reply('✅ Toko ditutup'); });
+bot.callbackQuery('ubah_info', ctx => { ctx.answerCallbackQuery(); ctx.reply('✏️ Contoh: *info 📞 Buka 08.00-22.00 WIB*'); });
+bot.callbackQuery('atur_wd', ctx => { ctx.answerCallbackQuery(); ctx.reply('✏️ Contoh: *wd dana 0812xxxx a.n Nama*'); });
+bot.callbackQuery('lihat_user', ctx => { ctx.answerCallbackQuery(); const daftar = Object.entries(data.saldo).map(([id,s])=>`👤 ID: ${id} | Rp${s}`).join('\n')||'Belum ada'; ctx.reply(`📋 Daftar User:\n${daftar}`); });
+bot.callbackQuery('riwayat', ctx => { ctx.answerCallbackQuery(); const log = data.transaksi.slice(-15).join('\n')||'Kosong'; ctx.reply(`📜 Riwayat:\n${log}`); });
 
-bot.callbackQuery('cek_saldo', async ctx => {
-  await ctx.answerCallbackQuery();
-  const saldo = data.saldo[ctx.from.id] || 0;
-  await ctx.reply(`💵 *Saldo Kamu Saat Ini:*\nRp${saldo.toLocaleString('id-ID')}`, { parse_mode: 'Markdown' });
-});
-
-bot.callbackQuery('cara_pakai', async ctx => {
-  await ctx.answerCallbackQuery();
-  await ctx.reply(`📖 *Cara Menggunakan WS SELL XCRL* 📱
-
-1. Pilih menu 📤 *JUAL NOMOR*
-2. Kirim nomor WhatsApp kamu
-3. Ikuti petunjuk, masukkan kode verifikasi di WA kamu
-4. Kirim kode tersebut kembali ke bot
-✅ Selesai! Saldo otomatis masuk, WA tetap bisa dipakai
-
-💰 Rate: Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}
-💳 Minimal WD: Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}`, { parse_mode: 'Markdown' });
-});
-
-bot.callbackQuery('menu_wd', async ctx => {
-  await ctx.answerCallbackQuery();
-  const saldo = data.saldo[ctx.from.id] || 0;
-  if (saldo < PENGATURAN.MIN_WD) {
-    return ctx.reply(`❌ *Saldo Belum Cukup*\nMinimal penarikan: *Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}*\nSaldo kamu: *Rp${saldo.toLocaleString('id-ID')}*`, { parse_mode: 'Markdown' });
-  }
-  const daftarMetode = Object.entries(WD_METHODS).map(([m, r]) => `• ${m.toUpperCase()}: ${r}`).join('\n');
-  await ctx.reply(`💳 *Cara Tarik Saldo* 💸
-
-Gunakan format:
-*/wd <metode> <jumlah>*
-
-Contoh:
-/wd dana 25000
-
-Metode tersedia:
-${daftarMetode}`, { parse_mode: 'Markdown' });
-});
-
-bot.callbackQuery('ubah_rate', ctx => {
-  ctx.answerCallbackQuery();
-  ctx.reply('✏️ *Ubah Harga per Nomor*\nContoh: *rate 7500*', { parse_mode: 'Markdown' });
-});
-
-bot.callbackQuery('atur_status', ctx => {
-  ctx.answerCallbackQuery();
-  const tombolStatus = new InlineKeyboard()
-    .text('🟢 BUKA TOKO', 'set_buka').row()
-    .text('🔴 TUTUP TOKO', 'set_tutup');
-  ctx.reply('🏪 *Pilih Status Toko:*', { reply_markup: tombolStatus, parse_mode: 'Markdown' });
-});
-
-bot.callbackQuery('set_buka', ctx => {
-  ctx.answerCallbackQuery();
-  PENGATURAN.STATUS_TOKO = "🟢 TOKO SEDANG BUKA";
-  simpanSemua();
-  ctx.reply('✅ Toko berhasil dibuka kembali!');
-});
-
-bot.callbackQuery('set_tutup', ctx => {
-  ctx.answerCallbackQuery();
-  PENGATURAN.STATUS_TOKO = "🔴 TOKO SEDANG TUTUP";
-  simpanSemua();
-  ctx.reply('✅ Toko berhasil ditutup sementara!');
-});
-
-bot.callbackQuery('ubah_info', ctx => {
-  ctx.answerCallbackQuery();
-  ctx.reply('✏️ *Ubah Info / Kontak*\nContoh: *info 📞 Bantuan: +628xxxxxxx*', { parse_mode: 'Markdown' });
-});
-
-bot.callbackQuery('atur_wd', ctx => {
-  ctx.answerCallbackQuery();
-  ctx.reply('✏️ *Atur Rekening Tujuan*\nContoh: *wd dana 0812xxxxxxx a.n Nama*', { parse_mode: 'Markdown' });
-});
-
-bot.callbackQuery('lihat_user', ctx => {
-  ctx.answerCallbackQuery();
-  const daftar = Object.entries(data.saldo).map(([id, s]) => `👤 ID: ${id} | Rp${s.toLocaleString('id-ID')}`).join('\n') || 'Belum ada pengguna';
-  ctx.reply(`📋 *Daftar Pengguna & Saldo:*\n${daftar}`);
-});
-
-bot.callbackQuery('riwayat', ctx => {
-  ctx.answerCallbackQuery();
-  const log = data.transaksi.slice(-20).join('\n') || 'Belum ada riwayat transaksi';
-  ctx.reply(`📜 *Riwayat Transaksi Terakhir:*\n${log}`);
-});
-
-// Perintah Tarik Saldo
+bot.command('start', ctx => ctx.from.id === ADMIN_ID ? menuAdmin(ctx) : menuPengguna(ctx));
 bot.command('wd', async ctx => {
   const uid = ctx.from.id;
   const args = ctx.message.text.trim().split(' ');
   const metode = args[1]?.toLowerCase();
   const jumlah = parseInt(args[2]);
-
-  if (!metode || !jumlah || jumlah < PENGATURAN.MIN_WD || !WD_METHODS[metode] || (data.saldo[uid] || 0) < jumlah) {
-    return ctx.reply('❌ Format salah, saldo tidak cukup, atau metode tidak tersedia!', { parse_mode: 'Markdown' });
-  }
-
+  if (!metode || !jumlah || jumlah < PENGATURAN.MIN_WD || !WD_METHODS[metode] || (data.saldo[uid]||0) < jumlah)
+    return ctx.reply('❌ Format salah / saldo kurang / metode tidak ada');
   data.saldo[uid] -= jumlah;
-  const catatanWD = `[${new Date().toLocaleString('id-ID')}] | User: ${uid} | WD: Rp${jumlah.toLocaleString('id-ID')} ke ${metode.toUpperCase()}`;
-  data.wd.push(catatanWD);
   simpanSemua();
-
-  await ctx.reply(`✅ *Permintaan Penarikan Diterima!* 💸
-💳 Metode: ${metode.toUpperCase()}
-💵 Jumlah: Rp${jumlah.toLocaleString('id-ID')}
-🏦 Tujuan: ${WD_METHODS[metode]}
-
-⏳ Proses maksimal 1x24 jam kerja`, { parse_mode: 'Markdown' });
-
-  await bot.api.sendMessage(ADMIN_ID, `📤 *PERMINTAAN PENARIKAN*
-👤 User: ${uid}
-💳 Metode: ${metode.toUpperCase()}
-💵 Jumlah: Rp${jumlah.toLocaleString('id-ID')}
-🏦 Tujuan: ${WD_METHODS[metode]}`, { parse_mode: 'Markdown' });
+  ctx.reply(`✅ WD diterima: Rp${jumlah.toLocaleString('id-ID')} ke ${metode.toUpperCase()}`);
+  bot.api.sendMessage(ADMIN_ID, `📤 WD: User ${uid} | Rp${jumlah} ke ${metode}`);
 });
 
-// Perintah Dasar
-bot.command('start', async ctx => {
-  const uid = ctx.from.id;
-  if (!data.saldo[uid]) data.saldo[uid] = 0;
-  return uid === ADMIN_ID ? menuAdmin(ctx) : menuPengguna(ctx);
-});
-
-bot.start();
-console.log('🤖 WS SELL XCRL • Berjalan 24 Jam | WA Tetap Bisa Diakses');
-     
+// Tangani error & jalankan bot
+bot.catch((err) => console.error('❌ Error bot:', err));
+bot.start({ polling: true });
+console.log('🤖 WS SELL XCRL • Berjalan 24 Jam');
+                 
